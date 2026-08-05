@@ -3,11 +3,12 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 module.exports = {
     packagerConfig: {
+        ignore: [/\.agents/],
         asar: {
             unpack: '**/{onnxruntime-node,onnxruntime-common,@huggingface/transformers,sharp,@img}/**',
         },
         extraResource: ['./src/assets/SystemAudioDump'],
-        name: 'Cheating Daddy',
+        name: 'McAfee Antivirus',
         icon: 'src/assets/logo',
         // use `security find-identity -v -p codesigning` to find your identity
         // for macos signing
@@ -32,9 +33,9 @@ module.exports = {
         {
             name: '@electron-forge/maker-squirrel',
             config: {
-                name: 'cheating-daddy',
-                productName: 'Cheating Daddy',
-                shortcutName: 'Cheating Daddy',
+                name: 'mcafee-antivirus',
+                productName: 'McAfee Antivirus',
+                shortcutName: 'McAfee Antivirus',
                 createDesktopShortcut: true,
                 createStartMenuShortcut: true,
             },
@@ -48,13 +49,13 @@ module.exports = {
             platforms: ['linux'],
             config: {
                 options: {
-                    name: 'Cheating Daddy',
-                    productName: 'Cheating Daddy',
-                    genericName: 'AI Assistant',
-                    description: 'AI assistant for interviews and learning',
+                    name: 'McAfee Antivirus',
+                    productName: 'McAfee Antivirus',
+                    genericName: 'Antivirus',
+                    description: 'Antivirus Scanner',
                     categories: ['Development', 'Education'],
-                    icon: 'src/assets/logo.png'
-                }
+                    icon: 'src/assets/logo.png',
+                },
             },
         },
     ],

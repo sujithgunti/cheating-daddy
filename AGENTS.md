@@ -116,6 +116,14 @@ When implementing transcription features borrow the following rules from
   once.
 - **Error recovery** – handle audio device failures gracefully.
 
+## Fallback Text Model Guidelines
+
+When the local AI pipeline or Groq is not active, the assistant falls back to the Google AI Studio hosted text model.
+
+- Use **`gemini-2.5-flash`** as the primary model for this fallback to keep response latencies low (~1.9s Time to First Token).
+- Fall back to **`gemini-3.5-flash`** as a secondary option if the primary model is unavailable.
+- Avoid heavy, slow models like hosted Gemma variants on this path to preserve real-time usability.
+
 ## Privacy by design
 
 - **Local processing** – transcriptions should happen locally whenever possible.

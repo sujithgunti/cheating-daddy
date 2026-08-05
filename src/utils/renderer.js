@@ -130,6 +130,17 @@ function convertFloat32ToInt16(float32Array) {
     return int16Array;
 }
 
+const VAD_THRESHOLD = 0.002;
+
+function isSpeechFloat32(samples) {
+    let sum = 0;
+    for (let i = 0; i < samples.length; i++) {
+        sum += samples[i] * samples[i];
+    }
+    const rms = Math.sqrt(sum / samples.length);
+    return (rms > VAD_THRESHOLD);
+}
+
 function arrayBufferToBase64(buffer) {
     let binary = '';
     const bytes = new Uint8Array(buffer);
@@ -373,6 +384,8 @@ function setupLinuxMicProcessing(micStream) {
 
     let audioBuffer = [];
     const samplesPerChunk = SAMPLE_RATE * AUDIO_CHUNK_DURATION;
+    let hangoverChunks = 0;
+    const MAX_HANGOVER_CHUNKS = 5; // 500ms hangover
 
     micProcessor.onaudioprocess = async e => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -381,13 +394,22 @@ function setupLinuxMicProcessing(micStream) {
         // Process audio in chunks
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
-            const pcmData16 = convertFloat32ToInt16(chunk);
-            const base64Data = arrayBufferToBase64(pcmData16.buffer);
+            
+            if (isSpeechFloat32(chunk)) {
+                hangoverChunks = MAX_HANGOVER_CHUNKS;
+            } else {
+                hangoverChunks--;
+            }
 
-            await ipcRenderer.invoke('send-mic-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (hangoverChunks >= 0) {
+                const pcmData16 = convertFloat32ToInt16(chunk);
+                const base64Data = arrayBufferToBase64(pcmData16.buffer);
+
+                await ipcRenderer.invoke('send-mic-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -406,6 +428,8 @@ function setupLinuxSystemAudioProcessing() {
 
     let audioBuffer = [];
     const samplesPerChunk = SAMPLE_RATE * AUDIO_CHUNK_DURATION;
+    let hangoverChunks = 0;
+    const MAX_HANGOVER_CHUNKS = 5; // 500ms hangover
 
     audioProcessor.onaudioprocess = async e => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -414,13 +438,22 @@ function setupLinuxSystemAudioProcessing() {
         // Process audio in chunks
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
-            const pcmData16 = convertFloat32ToInt16(chunk);
-            const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (isSpeechFloat32(chunk)) {
+                hangoverChunks = MAX_HANGOVER_CHUNKS;
+            } else {
+                hangoverChunks--;
+            }
+
+            if (hangoverChunks >= 0) {
+                const pcmData16 = convertFloat32ToInt16(chunk);
+                const base64Data = arrayBufferToBase64(pcmData16.buffer);
+
+                await ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -436,6 +469,8 @@ function setupWindowsLoopbackProcessing() {
 
     let audioBuffer = [];
     const samplesPerChunk = SAMPLE_RATE * AUDIO_CHUNK_DURATION;
+    let hangoverChunks = 0;
+    const MAX_HANGOVER_CHUNKS = 5; // 500ms hangover
 
     audioProcessor.onaudioprocess = async e => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -444,13 +479,22 @@ function setupWindowsLoopbackProcessing() {
         // Process audio in chunks
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
-            const pcmData16 = convertFloat32ToInt16(chunk);
-            const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (isSpeechFloat32(chunk)) {
+                hangoverChunks = MAX_HANGOVER_CHUNKS;
+            } else {
+                hangoverChunks--;
+            }
+
+            if (hangoverChunks >= 0) {
+                const pcmData16 = convertFloat32ToInt16(chunk);
+                const base64Data = arrayBufferToBase64(pcmData16.buffer);
+
+                await ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -1003,7 +1047,13 @@ const theme = {
 
     async save(themeName) {
         await storage.updatePreference('theme', themeName);
-        this.apply(themeName);
+        try {
+            const prefs = await storage.getPreferences();
+            const alpha = prefs.backgroundTransparency ?? 0.8;
+            this.apply(themeName, alpha);
+        } catch (err) {
+            this.apply(themeName);
+        }
     }
 };
 

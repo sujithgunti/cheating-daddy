@@ -107,7 +107,10 @@ function getDefaultKeybinds() {
         nextResponse: isMac ? 'Cmd+]' : 'Ctrl+]',
         scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
         scrollDown: isMac ? 'Cmd+Shift+Down' : 'Ctrl+Shift+Down',
+        toggleTheme: isMac ? 'Cmd+Shift+B' : 'Ctrl+Shift+B',
         emergencyErase: isMac ? 'Cmd+Shift+E' : 'Ctrl+Shift+E',
+        manualSendText: isMac ? 'Option+Enter' : 'Alt+Enter',
+        toggleAutoMode: isMac ? 'Cmd+Shift+A' : 'Ctrl+Shift+A',
     };
 }
 
@@ -267,6 +270,45 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
             console.log(`Registered scrollDown: ${keybinds.scrollDown}`);
         } catch (error) {
             console.error(`Failed to register scrollDown (${keybinds.scrollDown}):`, error);
+        }
+    }
+
+    // Register toggle theme shortcut
+    if (keybinds.toggleTheme) {
+        try {
+            globalShortcut.register(keybinds.toggleTheme, () => {
+                console.log('Toggle theme shortcut triggered');
+                sendToRenderer('toggle-theme');
+            });
+            console.log(`Registered toggleTheme: ${keybinds.toggleTheme}`);
+        } catch (error) {
+            console.error(`Failed to register toggleTheme (${keybinds.toggleTheme}):`, error);
+        }
+    }
+
+    // Register manual send text shortcut
+    if (keybinds.manualSendText) {
+        try {
+            globalShortcut.register(keybinds.manualSendText, () => {
+                console.log('Manual send text shortcut triggered');
+                sendToRenderer('trigger-manual-send');
+            });
+            console.log(`Registered manualSendText: ${keybinds.manualSendText}`);
+        } catch (error) {
+            console.error(`Failed to register manualSendText (${keybinds.manualSendText}):`, error);
+        }
+    }
+    
+    // Register toggle auto mode shortcut
+    if (keybinds.toggleAutoMode) {
+        try {
+            globalShortcut.register(keybinds.toggleAutoMode, () => {
+                console.log('Toggle auto mode shortcut triggered');
+                sendToRenderer('toggle-auto-mode');
+            });
+            console.log(`Registered toggleAutoMode: ${keybinds.toggleAutoMode}`);
+        } catch (error) {
+            console.error(`Failed to register toggleAutoMode (${keybinds.toggleAutoMode}):`, error);
         }
     }
 

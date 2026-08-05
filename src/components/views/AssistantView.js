@@ -248,6 +248,35 @@ export class AssistantView extends LitElement {
             color: var(--text-muted);
         }
 
+        .mode-toggle {
+            font-size: var(--font-size-xs);
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .mode-toggle:hover {
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+        }
+
+        .mode-toggle.auto {
+            color: var(--success);
+            border-color: rgba(76, 175, 80, 0.3);
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .mode-toggle.manual {
+            color: var(--accent);
+            border-color: rgba(255, 152, 0, 0.3);
+            background: rgba(255, 152, 0, 0.1);
+        }
+
         .analyze-btn {
             position: relative;
             background: var(--bg-elevated);
@@ -304,7 +333,9 @@ export class AssistantView extends LitElement {
         responses: { type: Array },
         currentResponseIndex: { type: Number },
         selectedProfile: { type: String },
+        autoAnswerMode: { type: Boolean },
         onSendText: { type: Function },
+        onAutoAnswerChange: { type: Function },
         shouldAnimateResponse: { type: Boolean },
         isAnalyzing: { type: Boolean, state: true },
     };
@@ -314,7 +345,9 @@ export class AssistantView extends LitElement {
         this.responses = [];
         this.currentResponseIndex = -1;
         this.selectedProfile = 'interview';
+        this.autoAnswerMode = false;
         this.onSendText = () => {};
+        this.onAutoAnswerChange = () => {};
         this.isAnalyzing = false;
         this._animFrame = null;
     }
@@ -672,13 +705,13 @@ export class AssistantView extends LitElement {
 
             ${hasMultipleResponses ? html`
                 <div class="response-nav">
-                    <button class="nav-btn" @click=${this.navigateToPreviousResponse} ?disabled=${this.currentResponseIndex <= 0} title="Previous response">
+                    <button class="nav-btn" @click=${this.navigateToPreviousResponse} ?disabled=${this.currentResponseIndex <= 0}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
                         </svg>
                     </button>
                     <span class="response-counter">${this.currentResponseIndex + 1} of ${this.responses.length}</span>
-                    <button class="nav-btn" @click=${this.navigateToNextResponse} ?disabled=${this.currentResponseIndex >= this.responses.length - 1} title="Next response">
+                    <button class="nav-btn" @click=${this.navigateToNextResponse} ?disabled=${this.currentResponseIndex >= this.responses.length - 1}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
                         </svg>
@@ -694,6 +727,12 @@ export class AssistantView extends LitElement {
                         placeholder="Type a message..."
                         @keydown=${this.handleTextKeydown}
                     />
+                </div>
+                <div 
+                    class="mode-toggle ${this.autoAnswerMode ? 'auto' : 'manual'}" 
+                    @click=${() => this.onAutoAnswerChange(!this.autoAnswerMode)} 
+                >
+                    ${this.autoAnswerMode ? 'Auto' : 'Manual'}
                 </div>
                 <button class="analyze-btn ${this.isAnalyzing ? 'analyzing' : ''}" @click=${this.handleScreenAnswer}>
                     <canvas class="analyze-canvas"></canvas>

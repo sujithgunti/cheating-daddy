@@ -345,6 +345,7 @@ export class CheatingDaddyApp extends LitElement {
 
     static properties = {
         currentView: { type: String },
+        theme: { type: String },
         statusText: { type: String },
         startTime: { type: Number },
         isRecording: { type: Boolean },
@@ -363,6 +364,7 @@ export class CheatingDaddyApp extends LitElement {
         _storageLoaded: { state: true },
         _updateAvailable: { state: true },
         _whisperDownloading: { state: true },
+        autoAnswerMode: { type: Boolean },
     };
 
     constructor() {
@@ -389,6 +391,8 @@ export class CheatingDaddyApp extends LitElement {
         this._updateAvailable = false;
         this._whisperDownloading = false;
         this._localVersion = '';
+        this.autoAnswerMode = false;
+        this.theme = 'dark';
 
         this._loadFromStorage();
         this._checkForUpdates();
@@ -430,8 +434,14 @@ export class CheatingDaddyApp extends LitElement {
             this.selectedScreenshotInterval = prefs.selectedScreenshotInterval || '5';
             this.selectedImageQuality = prefs.selectedImageQuality || 'medium';
             this.layoutMode = config.layout || 'normal';
+            this.autoAnswerMode = prefs.autoAnswerMode || false;
+            this.theme = prefs.theme || 'dark';
 
             this._storageLoaded = true;
+            if (window.require) {
+                const { ipcRenderer } = window.require('electron');
+                ipcRenderer.send('update-auto-answer-mode', this.autoAnswerMode);
+            }
             this.requestUpdate();
         } catch (error) {
             console.error('Error loading from storage:', error);
@@ -451,6 +461,19 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.on('click-through-toggled', (_, isEnabled) => { this._isClickThrough = isEnabled; });
             ipcRenderer.on('reconnect-failed', (_, data) => this.addNewResponse(data.message));
             ipcRenderer.on('whisper-downloading', (_, downloading) => { this._whisperDownloading = downloading; });
+            
+            // New Auto vs Manual IPC Listeners
+            ipcRenderer.on('transcription-update', (_, text) => this.handleTranscriptionUpdate(text));
+            ipcRenderer.on('toggle-theme', () => this.handleThemeToggle());
+            ipcRenderer.on('toggle-auto-mode', () => this.handleAutoAnswerToggle());
+            ipcRenderer.on('trigger-manual-send', () => {
+                if (this.currentView === 'assistant') {
+                    const assistantView = this.shadowRoot.querySelector('assistant-view');
+                    if (assistantView) {
+                        assistantView.handleSendText();
+                    }
+                }
+            });
         }
     }
 
@@ -465,6 +488,10 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.removeAllListeners('click-through-toggled');
             ipcRenderer.removeAllListeners('reconnect-failed');
             ipcRenderer.removeAllListeners('whisper-downloading');
+            ipcRenderer.removeAllListeners('transcription-update');
+            ipcRenderer.removeAllListeners('trigger-manual-send');
+            ipcRenderer.removeAllListeners('toggle-theme');
+            ipcRenderer.removeAllListeners('toggle-auto-mode');
         }
     }
 
@@ -562,6 +589,32 @@ export class CheatingDaddyApp extends LitElement {
         }
     }
 
+    async handleAutoAnswerToggle() {
+        const newMode = !this.autoAnswerMode;
+        this.autoAnswerMode = newMode;
+        
+        // Save to storage
+        const rendererUtils = await import('../../utils/renderer.js');
+        await rendererUtils.storage.updatePreference('autoAnswerMode', this.autoAnswerMode);
+        
+        // Notify main process for background logic
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.send('update-auto-answer-mode', this.autoAnswerMode);
+        }
+        
+        // Provide visual feedback
+        const originalStatus = this.statusText;
+        this.setStatus(`Mode switched to: ${this.autoAnswerMode ? 'Auto' : 'Manual'}`);
+        setTimeout(() => {
+            if (this.statusText && this.statusText.includes('Mode switched to')) {
+                this.setStatus(originalStatus);
+            }
+        }, 3000);
+        
+        this.requestUpdate();
+    }
+
     // ── Session start ──
 
     async handleStart() {
@@ -632,6 +685,44 @@ export class CheatingDaddyApp extends LitElement {
     }
 
     // ── Settings handlers ──
+
+    async handleThemeToggle() {
+        this.theme = this.theme === 'dark' ? 'light' : 'dark';
+        if (window.cheatingDaddy && window.cheatingDaddy.theme) {
+            await window.cheatingDaddy.theme.save(this.theme);
+            
+            // Sync CustomizeView if it's currently rendered
+            const customizeView = this.shadowRoot.querySelector('customize-view');
+            if (customizeView) {
+                customizeView.theme = this.theme;
+                customizeView.updateBackgroundAppearance();
+            }
+        }
+        this.requestUpdate();
+    }
+
+    async handleAutoAnswerModeChange(enabled) {
+        this.autoAnswerMode = enabled;
+        await cheatingDaddy.storage.updatePreference('autoAnswerMode', enabled);
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.send('update-auto-answer-mode', enabled);
+        }
+        this.requestUpdate();
+    }
+
+    handleTranscriptionUpdate(text) {
+        if (!this._isLiveMode()) return;
+        const assistantView = this.shadowRoot.querySelector('assistant-view');
+        if (assistantView) {
+            const input = assistantView.shadowRoot.querySelector('#textInput');
+            // document.activeElement on shadow DOM gets the shadow host
+            // Use shadowRoot.activeElement directly
+            if (input && assistantView.shadowRoot.activeElement !== input) {
+                input.value = text;
+            }
+        }
+    }
 
     async handleProfileChange(profile) {
         this.selectedProfile = profile;
@@ -771,7 +862,9 @@ export class CheatingDaddyApp extends LitElement {
                         .responses=${this.responses}
                         .currentResponseIndex=${this.currentResponseIndex}
                         .selectedProfile=${this.selectedProfile}
+                        .autoAnswerMode=${this.autoAnswerMode}
                         .onSendText=${msg => this.handleSendText(msg)}
+                        .onAutoAnswerChange=${mode => this.handleAutoAnswerModeChange(mode)}
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @response-animation-complete=${() => {
@@ -807,7 +900,6 @@ export class CheatingDaddyApp extends LitElement {
                         <button
                             class="nav-item ${this.currentView === item.id ? 'active' : ''}"
                             @click=${() => this.navigate(item.id)}
-                            title=${item.label}
                         >
                             ${item.icon}
                             ${item.label}
@@ -843,7 +935,7 @@ export class CheatingDaddyApp extends LitElement {
         return html`
             <div class="live-bar">
                 <div class="live-bar-left">
-                    <button class="live-bar-back" @click=${() => this.handleClose()} title="End session">
+                    <button class="live-bar-back" @click=${() => this.handleClose()}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 0 1-.02 1.06L8.832 10l3.938 3.71a.75.75 0 1 1-1.04 1.08l-4.5-4.25a.75.75 0 0 1 0-1.08l4.5-4.25a.75.75 0 0 1 1.06.02Z" clip-rule="evenodd" />
                         </svg>
@@ -856,6 +948,11 @@ export class CheatingDaddyApp extends LitElement {
                     ${this.statusText ? html`<span class="live-bar-text">${this.statusText}</span>` : ''}
                     <span class="live-bar-text">${this.getElapsedTime()}</span>
                     ${this._isClickThrough ? html`<span class="live-bar-text">[click through]</span>` : ''}
+                    <button class="live-bar-back" @click=${() => this.handleThemeToggle()} style="margin-left: 8px;">
+                        ${this.theme === 'dark' 
+                            ? html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`
+                            : html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`}
+                    </button>
                     <span class="live-bar-text clickable" @click=${() => this.handleHideToggle()}>[hide]</span>
                 </div>
             </div>
@@ -878,9 +975,9 @@ export class CheatingDaddyApp extends LitElement {
             <div class="app-shell">
                 <div class="top-drag-bar ${isLive ? 'hidden' : ''}">
                     <div class="traffic-lights">
-                        <button class="traffic-light close" @click=${() => this.handleClose()} title="Close"></button>
-                        <button class="traffic-light minimize" @click=${() => this._handleMinimize()} title="Minimize"></button>
-                        <button class="traffic-light maximize" title="Maximize"></button>
+                        <button class="traffic-light close" @click=${() => this.handleClose()}></button>
+                        <button class="traffic-light minimize" @click=${() => this._handleMinimize()}></button>
+                        <button class="traffic-light maximize"></button>
                     </div>
                     <div class="drag-region"></div>
                 </div>

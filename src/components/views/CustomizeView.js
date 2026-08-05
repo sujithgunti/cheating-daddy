@@ -193,6 +193,8 @@ export class CustomizeView extends LitElement {
         isRestoring: { type: Boolean },
         clearStatusMessage: { type: String },
         clearStatusType: { type: String },
+        autoAnswerMode: { type: Boolean },
+        onAutoAnswerModeChange: { type: Function },
     };
 
     constructor() {
@@ -216,6 +218,8 @@ export class CustomizeView extends LitElement {
         this.audioMode = 'speaker_only';
         this.customPrompt = '';
         this.theme = 'dark';
+        this.autoAnswerMode = false;
+        this.onAutoAnswerModeChange = () => {};
         this._loadFromStorage();
     }
 
@@ -232,6 +236,7 @@ export class CustomizeView extends LitElement {
             this.audioMode = prefs.audioMode ?? 'speaker_only';
             this.customPrompt = prefs.customPrompt ?? '';
             this.theme = prefs.theme ?? 'dark';
+            this.autoAnswerMode = prefs.autoAnswerMode ?? false;
             if (keybinds) {
                 this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
             }
@@ -303,6 +308,8 @@ export class CustomizeView extends LitElement {
             nextResponse: isMac ? 'Cmd+]' : 'Ctrl+]',
             scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
             scrollDown: isMac ? 'Cmd+Shift+Down' : 'Ctrl+Shift+Down',
+            toggleTheme: isMac ? 'Cmd+Shift+B' : 'Ctrl+Shift+B',
+            toggleAutoMode: isMac ? 'Cmd+Shift+A' : 'Ctrl+Shift+A',
         };
     }
 
@@ -319,6 +326,9 @@ export class CustomizeView extends LitElement {
             { key: 'nextResponse', name: 'Next Response', description: 'Move to next AI response' },
             { key: 'scrollUp', name: 'Scroll Response Up', description: 'Scroll response content upward' },
             { key: 'scrollDown', name: 'Scroll Response Down', description: 'Scroll response content downward' },
+            { key: 'toggleTheme', name: 'Toggle Theme', description: 'Switch between dark and light themes' },
+            { key: 'toggleAutoMode', name: 'Toggle Auto/Manual Mode', description: 'Switch between Auto and Manual AI modes' },
+            { key: 'manualSendText', name: 'Send Manual Text', description: 'Send drafted text to AI in manual mode' },
         ];
     }
 
@@ -358,6 +368,13 @@ export class CustomizeView extends LitElement {
     async handleAudioModeSelect(e) {
         this.audioMode = e.target.value;
         await cheatingDaddy.storage.updatePreference('audioMode', this.audioMode);
+        this.requestUpdate();
+    }
+
+    async handleAutoAnswerModeChange(e) {
+        this.autoAnswerMode = e.target.checked;
+        await cheatingDaddy.storage.updatePreference('autoAnswerMode', this.autoAnswerMode);
+        this.onAutoAnswerModeChange(this.autoAnswerMode);
         this.requestUpdate();
     }
 
@@ -490,6 +507,7 @@ export class CustomizeView extends LitElement {
                 backgroundTransparency: 0.8,
                 googleSearchEnabled: false,
                 theme: 'dark',
+                autoAnswerMode: false,
             };
             for (const [key, value] of Object.entries(defaults)) {
                 await cheatingDaddy.storage.updatePreference(key, value);
@@ -513,6 +531,7 @@ export class CustomizeView extends LitElement {
             this.googleSearchEnabled = defaults.googleSearchEnabled;
             this.customPrompt = defaults.customPrompt;
             this.theme = defaults.theme;
+            this.autoAnswerMode = defaults.autoAnswerMode;
 
             // Notify parent callbacks
             this.onProfileChange(defaults.selectedProfile);
@@ -583,6 +602,16 @@ export class CustomizeView extends LitElement {
                     ${this.audioMode !== 'speaker_only' ? html`
                         <div class="warning-callout">May cause unexpected behavior. Only change this if you know what you're doing.</div>
                     ` : ''}
+                    <div class="toggle-row">
+                        <input
+                            type="checkbox"
+                            id="auto-answer-toggle"
+                            class="toggle-input"
+                            .checked=${this.autoAnswerMode}
+                            @change=${this.handleAutoAnswerModeChange}
+                        />
+                        <label for="auto-answer-toggle" class="toggle-label">Auto-Generate AI Answers</label>
+                    </div>
                     <div class="form-group">
                         <label class="form-label">Image Quality</label>
                         <select class="control" .value=${this.selectedImageQuality} @change=${this.handleImageQualitySelect}>
