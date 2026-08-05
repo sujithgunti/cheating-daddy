@@ -4,18 +4,23 @@ const storage = require('../storage');
 
 let mouseEventsIgnored = false;
 
+const DEFAULT_MAIN_WINDOW_SIZE = { width: 1100, height: 800 };
+const MIN_WINDOW_SIZE = { width: 700, height: 320 };
+
 function createWindow(sendToRenderer, geminiSessionRef) {
-    // Get layout preference (default to 'normal')
-    let windowWidth = 1100;
-    let windowHeight = 800;
+    let windowWidth = DEFAULT_MAIN_WINDOW_SIZE.width;
+    let windowHeight = DEFAULT_MAIN_WINDOW_SIZE.height;
 
     const mainWindow = new BrowserWindow({
         width: windowWidth,
         height: windowHeight,
+        minWidth: MIN_WINDOW_SIZE.width,
+        minHeight: MIN_WINDOW_SIZE.height,
+        resizable: true,
         frame: false,
         transparent: true,
         hasShadow: false,
-        alwaysOnTop: true,
+        alwaysOnTop: process.platform === 'win32',
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false, // TODO: change to true
@@ -37,9 +42,11 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         { useSystemPicker: true }
     );
 
-    mainWindow.setResizable(false);
     mainWindow.setContentProtection(true);
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    if (process.platform === 'win32') {
+        mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    }
 
     // Hide from Windows taskbar
     if (process.platform === 'win32') {
@@ -57,17 +64,6 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         } catch (error) {
             console.warn('Could not hide from Mission Control:', error.message);
         }
-    }
-
-    // Center window at the top of the screen
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width: screenWidth } = primaryDisplay.workAreaSize;
-    const x = Math.floor((screenWidth - windowWidth) / 2);
-    const y = 0;
-    mainWindow.setPosition(x, y);
-
-    if (process.platform === 'win32') {
-        mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
     }
 
     mainWindow.loadFile(path.join(__dirname, '../index.html'));
@@ -124,7 +120,6 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
     const { width, height } = primaryDisplay.workAreaSize;
     const moveIncrement = Math.floor(Math.min(width, height) * 0.1);
 
-    // Register window movement shortcuts
     const movementActions = {
         moveUp: () => {
             if (!mainWindow.isVisible()) return;
@@ -148,7 +143,6 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
         },
     };
 
-    // Register each movement shortcut
     Object.keys(movementActions).forEach(action => {
         const keybind = keybinds[action];
         if (keybind) {
@@ -343,23 +337,14 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
 function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
     ipcMain.on('view-changed', (event, view) => {
         if (!mainWindow.isDestroyed()) {
-            const primaryDisplay = screen.getPrimaryDisplay();
-            const { width: screenWidth } = primaryDisplay.workAreaSize;
+            const isLiveMode = view === 'assistant';
 
-            if (view === 'assistant') {
-                // Shrink window for live view
-                const liveWidth = 850;
-                const liveHeight = 400;
-                const x = Math.floor((screenWidth - liveWidth) / 2);
-                mainWindow.setSize(liveWidth, liveHeight);
-                mainWindow.setPosition(x, 0);
-            } else {
-                // Restore full size
-                const fullWidth = 1100;
-                const fullHeight = 800;
-                const x = Math.floor((screenWidth - fullWidth) / 2);
-                mainWindow.setSize(fullWidth, fullHeight);
-                mainWindow.setPosition(x, 0);
+            if (process.platform !== 'win32') {
+                mainWindow.setAlwaysOnTop(isLiveMode);
+                mainWindow.setVisibleOnAllWorkspaces(isLiveMode, { visibleOnFullScreen: isLiveMode });
+            }
+
+            if (!isLiveMode) {
                 mainWindow.setIgnoreMouseEvents(false);
             }
         }
@@ -393,12 +378,6 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
             console.error('Error toggling window visibility:', error);
             return { success: false, error: error.message };
         }
-    });
-
-    ipcMain.handle('update-sizes', async event => {
-        // With the sidebar layout, the window size is user-controlled.
-        // This handler is kept for compatibility but is a no-op now.
-        return { success: true };
     });
 }
 

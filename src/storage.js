@@ -9,6 +9,10 @@ const DEFAULT_CONFIG = {
     configVersion: CONFIG_VERSION,
     onboarded: false,
     layout: 'normal',
+    geminiLiveModel: 'gemini-3.1-flash-live-preview',
+    groqModel: 'qwen/qwen3.6-27b',
+    groqImageModel: 'qwen/qwen3.6-27b',
+    disableGroqThinking: true,
 };
 
 const DEFAULT_CREDENTIALS = {
@@ -18,6 +22,7 @@ const DEFAULT_CREDENTIALS = {
 
 const DEFAULT_PREFERENCES = {
     customPrompt: '',
+    providerMode: 'byok',
     selectedProfile: 'interview',
     selectedLanguage: 'en-US',
     selectedScreenshotInterval: '5',
@@ -29,6 +34,7 @@ const DEFAULT_PREFERENCES = {
     googleSearchEnabled: false,
     ollamaHost: 'http://127.0.0.1:11434',
     ollamaModel: 'llama3.1',
+    localLlmModel: 'unsloth/Qwen3.5-4B-GGUF:Q4_K_M',
     whisperModel: 'Xenova/whisper-small',
     autoAnswerMode: false,
 };
@@ -36,7 +42,7 @@ const DEFAULT_PREFERENCES = {
 const DEFAULT_KEYBINDS = null; // null means use system defaults
 
 const DEFAULT_LIMITS = {
-    data: [], // Array of { date: 'YYYY-MM-DD', flash: { count }, flashLite: { count }, groq: { 'qwen3-32b': { chars, limit }, 'gpt-oss-120b': { chars, limit }, 'gpt-oss-20b': { chars, limit } }, gemini: { 'gemini-3.5-flash': { chars }, 'gemini-2.5-flash': { chars }, 'gemini-3.1-flash-lite': { chars } } }
+    data: [], // Array of { date: 'YYYY-MM-DD', flash: { count }, flashLite: { count }, groq: { 'qwen3-32b': { chars, limit }, 'gpt-oss-120b': { chars, limit }, 'gpt-oss-20b': { chars, limit } }, gemini: { 'gemini-3.5-flash': { chars }, 'gemini-2.5-flash': { chars }, 'gemini-3.1-flash-lite': { chars }, 'gemma-4-26b-a4b-it': { chars } } }
 };
 
 // Get the config directory path based on OS
@@ -183,7 +189,8 @@ function initializeStorage() {
 // ============ CONFIG ============
 
 function getConfig() {
-    return readJsonFile(getConfigPath(), DEFAULT_CONFIG);
+    const saved = readJsonFile(getConfigPath(), {});
+    return { ...DEFAULT_CONFIG, ...saved };
 }
 
 function setConfig(config) {
@@ -230,7 +237,15 @@ function setGroqApiKey(groqApiKey) {
 
 function getPreferences() {
     const saved = readJsonFile(getPreferencesPath(), {});
-    return { ...DEFAULT_PREFERENCES, ...saved };
+    const preferences = { ...DEFAULT_PREFERENCES, ...saved };
+    const legacyWhisperModels = {
+        'Xenova/whisper-tiny': 'tiny.en',
+        'Xenova/whisper-base': 'base.en',
+        'Xenova/whisper-small': 'small.en',
+    };
+
+    preferences.whisperModel = legacyWhisperModels[preferences.whisperModel] || preferences.whisperModel;
+    return preferences;
 }
 
 function setPreferences(preferences) {
@@ -292,11 +307,13 @@ function getTodayLimits() {
                 'gemini-3.5-flash': { chars: 0 },
                 'gemini-2.5-flash': { chars: 0 },
                 'gemini-3.1-flash-lite': { chars: 0 },
+                'gemma-4-26b-a4b-it': { chars: 0 },
             };
         } else {
             if (!todayEntry.gemini['gemini-3.5-flash']) todayEntry.gemini['gemini-3.5-flash'] = { chars: 0 };
             if (!todayEntry.gemini['gemini-2.5-flash']) todayEntry.gemini['gemini-2.5-flash'] = { chars: 0 };
             if (!todayEntry.gemini['gemini-3.1-flash-lite']) todayEntry.gemini['gemini-3.1-flash-lite'] = { chars: 0 };
+            if (!todayEntry.gemini['gemma-4-26b-a4b-it']) todayEntry.gemini['gemma-4-26b-a4b-it'] = { chars: 0 };
         }
         setLimits(limits);
         return todayEntry;
@@ -318,6 +335,7 @@ function getTodayLimits() {
             'gemini-3.5-flash': { chars: 0 },
             'gemini-2.5-flash': { chars: 0 },
             'gemini-3.1-flash-lite': { chars: 0 },
+            'gemma-4-26b-a4b-it': { chars: 0 },
         },
     };
     limits.data.push(newEntry);
@@ -391,9 +409,6 @@ function getModelForToday() {
     const todayEntry = getTodayLimits();
     const groq = todayEntry.groq;
 
-    if (groq['qwen3-32b'].chars < groq['qwen3-32b'].limit) {
-        return 'qwen/qwen3-32b';
-    }
     if (groq['gpt-oss-120b'].chars < groq['gpt-oss-120b'].limit) {
         return 'openai/gpt-oss-120b';
     }
@@ -561,7 +576,6 @@ module.exports = {
 
     // Clear all
     clearAllData,
-
     // Session Logging
     appendSessionLog,
 };
